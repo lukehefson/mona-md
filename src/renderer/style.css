@@ -1,0 +1,337 @@
+@import "github-markdown-css/github-markdown.css";
+
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --text: #24292f;
+  --muted: #57606a;
+  --border: #e5e7eb;
+  --accent: #0969da;
+  --accent-light: #4f9cf6;
+  --overlay: rgba(11, 11, 11, 0.4);
+}
+
+body.theme-dark {
+  color-scheme: dark;
+  --bg: #0d1117;
+  --text: #c9d1d9;
+  --muted: #8b949e;
+  --border: #30363d;
+  --accent: #58a6ff;
+  --accent-light: #79c0ff;
+  --overlay: rgba(1, 4, 9, 0.6);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "SF Pro Text", "SF Pro Display", -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+
+.app {
+  height: 100%;
+  background: var(--bg);
+}
+
+.main {
+  height: 100%;
+  padding: 56px 72px 96px;
+  background: var(--bg);
+}
+
+.editor,
+.preview {
+  height: 100%;
+  background: var(--bg);
+}
+
+.hidden {
+  display: none !important;
+}
+
+.editor .cm-editor {
+  height: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  font-family: "SFMono-Regular", "SF Mono", Menlo, monospace;
+  font-size: 15px;
+  line-height: 1.7;
+  background: transparent;
+  outline: none;
+}
+
+.editor .cm-scroller {
+  font-family: inherit;
+  outline: none;
+}
+
+.editor .cm-content {
+  padding: 0 8px;
+  outline: none;
+  color: var(--text);
+}
+
+.editor .cm-line {
+  padding: 0;
+}
+
+.editor .cm-activeLine {
+  background: rgba(9, 105, 218, 0.06);
+}
+
+.editor .cm-taskMarker {
+  color: var(--accent-light);
+}
+
+.editor .cm-editor.cm-focused,
+.editor .cm-editor.cm-focused .cm-scroller,
+.editor .cm-editor.cm-focused .cm-content {
+  outline: none;
+}
+
+.editor .cm-editor:focus-visible,
+.editor .cm-editor .cm-scroller:focus-visible,
+.editor .cm-editor .cm-content:focus-visible {
+  outline: none;
+}
+
+.editor .cm-md-code {
+  background: #f6f8fa;
+  color: #24292f;
+  border-radius: 4px;
+  padding: 0 4px;
+  box-decoration-break: clone;
+}
+
+.editor .cm-selectionBackground,
+.editor .cm-content ::selection {
+  background: rgba(9, 105, 218, 0.15);
+}
+
+.preview .markdown-body {
+  max-width: 900px;
+  margin: 0 auto;
+  font-family: "SF Pro Text", "SF Pro Display", -apple-system, "Helvetica Neue", Arial, sans-serif;
+  color: var(--text);
+  background: transparent;
+}
+
+body.theme-dark .markdown-body {
+  background-color: transparent !important;
+  color: var(--text) !important;
+}
+
+body.theme-dark .preview {
+  background-color: var(--bg);
+}
+
+body.theme-dark .preview .markdown-body {
+  background-color: var(--bg) !important;
+}
+
+body.theme-dark .markdown-body {
+  background-color: var(--bg) !important;
+}
+
+.preview .markdown-body a {
+  color: var(--accent);
+}
+
+.preview .markdown-body code,
+.preview .markdown-body pre {
+  font-family: "SFMono-Regular", "SF Mono", Menlo, monospace;
+}
+
+.preview .markdown-body kbd {
+  display: inline-block;
+  padding: 3px 6px;
+  font-size: 0.85em;
+  line-height: 1;
+  color: var(--text);
+  background-color: color-mix(in srgb, var(--bg) 92%, #ffffff 8%);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+
+.preview .markdown-body sub,
+.preview .markdown-body sup {
+  font-size: 0.75em;
+  line-height: 0;
+}
+
+.preview .markdown-body sup {
+  top: -0.5em;
+}
+
+.preview .markdown-body sub {
+  bottom: -0.25em;
+}
+
+.preview .markdown-body img {
+  max-width: 100%;
+}
+
+.preview .markdown-body [align="center"] {
+  text-align: center;
+}
+
+.preview .markdown-body [align="center"] img {
+  display: block;
+  margin: 0 auto;
+}
+
+.preview .markdown-body .footnotes {
+  border-top: 1px solid var(--border);
+  margin-top: 32px;
+  padding-top: 16px;
+}
+
+.preview .markdown-body .footnotes ol {
+  padding-left: 20px;
+}
+
+.preview .markdown-body .footnotes li {
+  margin-bottom: 8px;
+}
+
+.preview .markdown-body .footnote-ref {
+  font-size: 0.85em;
+}
+
+.preview .markdown-body .footnote-backref {
+  text-decoration: none;
+  margin-left: 6px;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--overlay);
+  z-index: 10;
+}
+
+.modal-card {
+  width: min(520px, 90vw);
+  background: var(--bg);
+  border-radius: 14px;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text);
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  line-height: 1;
+  color: var(--muted);
+  outline: none;
+}
+
+.modal-close:focus,
+.modal-close:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.modal-body {
+  padding: 18px 22px 24px;
+}
+
+.shortcut-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.shortcut-list li {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.shortcut-list li span:first-child {
+  color: var(--text);
+}
+
+.shortcut-list li span:last-child {
+  font-family: "SF Mono", "Fira Code", Menlo, monospace;
+  color: var(--accent);
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  color: var(--text);
+  padding: 6px 0;
+}
+
+.setting-row input[type="checkbox"] {
+  width: 40px;
+  height: 22px;
+  appearance: none;
+  background: color-mix(in srgb, var(--bg) 80%, #ffffff 20%);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.setting-row input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: var(--text);
+  border-radius: 50%;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.setting-row input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.setting-row input[type="checkbox"]:checked::after {
+  transform: translateX(18px);
+  background: #0d1117;
+}
+
+.markdown-body {
+  padding-bottom: 80px;
+}

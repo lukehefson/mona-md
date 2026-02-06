@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>mona</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div id="app" class="app">
+      <main class="main">
+        <section id="editor" class="editor"></section>
+        <section id="preview" class="preview hidden">
+          <article id="preview-content" class="markdown-body"></article>
+        </section>
+      </main>
+    </div>
+
+    <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <header class="modal-header">
+          <h2>Markdown Shortcuts</h2>
+          <button id="modal-close" class="modal-close" aria-label="Close">×</button>
+        </header>
+        <div class="modal-body">
+          <ul class="shortcut-list">
+            <li><span>Bold</span><span>Cmd/Ctrl + B</span></li>
+            <li><span>Italic</span><span>Cmd/Ctrl + I</span></li>
+            <li><span>Strikethrough</span><span>Cmd/Ctrl + Shift + X</span></li>
+            <li><span>Inline Code</span><span>Cmd/Ctrl + E</span></li>
+            <li><span>Link</span><span>Cmd/Ctrl + K</span></li>
+            <li><span>Quote</span><span>Cmd/Ctrl + Shift + .</span></li>
+            <li><span>Unordered List</span><span>Cmd/Ctrl + Shift + 8</span></li>
+            <li><span>Ordered List</span><span>Cmd/Ctrl + Shift + 7</span></li>
+            <li><span>Task List</span><span>Cmd/Ctrl + Shift + 9</span></li>
+            <li><span>Indent</span><span>Tab</span></li>
+            <li><span>Outdent</span><span>Shift + Tab</span></li>
+            <li><span>Heading</span><span>Cmd/Ctrl + Shift + H</span></li>
+            <li><span>Code Block</span><span>Cmd/Ctrl + Shift + K</span></li>
+            <li><span>Preview / Edit</span><span>Cmd/Ctrl + Shift + P</span></li>
+            <li><span>Shortcuts (Preview)</span><span>?</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div id="settings-modal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <header class="modal-header">
+          <h2>Settings</h2>
+          <button id="settings-close" class="modal-close" aria-label="Close">×</button>
+        </header>
+        <div class="modal-body">
+          <label class="setting-row">
+            <span>Dark mode</span>
+            <input id="dark-mode-toggle" type="checkbox" />
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
