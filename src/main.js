@@ -6,6 +6,10 @@ import path from 'path';
 const isDev = !app.isPackaged;
 app.setName('Mona MD');
 app.name = 'Mona MD';
+const appIconPath = path.join(
+  app.getAppPath(),
+  'AppIcons/Assets.xcassets/AppIcon.appiconset/1024.png'
+);
 
 let mainWindow;
 let recents = [];
@@ -57,6 +61,7 @@ const createWindow = async () => {
     height: 900,
     backgroundColor: '#ffffff',
     titleBarStyle: 'hiddenInset',
+    icon: appIconPath,
     webPreferences: {
       preload: path.join(app.getAppPath(), 'src/preload.cjs'),
       contextIsolation: true,
@@ -76,7 +81,10 @@ const createWindow = async () => {
   });
 };
 
-const sendToRenderer = (channel, payload) => {
+const sendToRenderer = async (channel, payload) => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    await createWindow();
+  }
   const contents = mainWindow?.webContents;
   if (!contents || contents.isDestroyed()) return;
   contents.send(channel, payload);
@@ -123,12 +131,12 @@ const buildMenu = () => {
         {
           label: 'New',
           accelerator: 'CmdOrCtrl+N',
-          click: () => sendToRenderer('menu-new')
+          click: async () => sendToRenderer('menu-new')
         },
         {
           label: 'Open…',
           accelerator: 'CmdOrCtrl+O',
-          click: () => sendToRenderer('menu-open')
+          click: async () => sendToRenderer('menu-open')
         },
         {
           label: 'Open Recent',
@@ -149,24 +157,24 @@ const buildMenu = () => {
         {
           label: 'Save',
           accelerator: 'CmdOrCtrl+S',
-          click: () => sendToRenderer('menu-save')
+          click: async () => sendToRenderer('menu-save')
         },
         {
           label: 'Duplicate',
           accelerator: 'CmdOrCtrl+Shift+S',
-          click: () => sendToRenderer('menu-save-as')
+          click: async () => sendToRenderer('menu-save-as')
         },
         { type: 'separator' },
         {
           label: 'Discard Draft',
           accelerator: 'CmdOrCtrl+Shift+D',
-          click: () => sendToRenderer('menu-discard-draft')
+          click: async () => sendToRenderer('menu-discard-draft')
         },
         { type: 'separator' },
         {
           label: 'Preview/Edit Markdown',
           accelerator: 'CmdOrCtrl+Shift+P',
-          click: () => sendToRenderer('menu-toggle-preview')
+          click: async () => sendToRenderer('menu-toggle-preview')
         }
       ]
     },
@@ -189,88 +197,88 @@ const buildMenu = () => {
           label: 'Markdown Shortcuts',
           id: 'format-shortcuts',
           accelerator: '?',
-          click: () => sendToRenderer('menu-show-shortcuts')
+          click: async () => sendToRenderer('menu-show-shortcuts')
         },
         { type: 'separator' },
         {
           label: 'Bold',
           id: 'format-bold',
           accelerator: 'CmdOrCtrl+B',
-          click: () => sendToRenderer('menu-format-bold')
+          click: async () => sendToRenderer('menu-format-bold')
         },
         {
           label: 'Italic',
           id: 'format-italic',
           accelerator: 'CmdOrCtrl+I',
-          click: () => sendToRenderer('menu-format-italic')
+          click: async () => sendToRenderer('menu-format-italic')
         },
         {
           label: 'Strikethrough',
           id: 'format-strike',
           accelerator: 'CmdOrCtrl+Shift+X',
-          click: () => sendToRenderer('menu-format-strike')
+          click: async () => sendToRenderer('menu-format-strike')
         },
         {
           label: 'Inline Code',
           id: 'format-code',
           accelerator: 'CmdOrCtrl+E',
-          click: () => sendToRenderer('menu-format-code')
+          click: async () => sendToRenderer('menu-format-code')
         },
         {
           label: 'Link',
           id: 'format-link',
           accelerator: 'CmdOrCtrl+K',
-          click: () => sendToRenderer('menu-format-link')
+          click: async () => sendToRenderer('menu-format-link')
         },
         { type: 'separator' },
         {
           label: 'Quote',
           id: 'format-quote',
           accelerator: 'CmdOrCtrl+Shift+.',
-          click: () => sendToRenderer('menu-format-quote')
+          click: async () => sendToRenderer('menu-format-quote')
         },
         {
           label: 'Unordered List',
           id: 'format-ul',
           accelerator: 'CmdOrCtrl+Shift+8',
-          click: () => sendToRenderer('menu-format-ul')
+          click: async () => sendToRenderer('menu-format-ul')
         },
         {
           label: 'Ordered List',
           id: 'format-ol',
           accelerator: 'CmdOrCtrl+Shift+7',
-          click: () => sendToRenderer('menu-format-ol')
+          click: async () => sendToRenderer('menu-format-ol')
         },
         {
           label: 'Task List',
           id: 'format-task',
           accelerator: 'CmdOrCtrl+Shift+9',
-          click: () => sendToRenderer('menu-format-task')
+          click: async () => sendToRenderer('menu-format-task')
         },
         { type: 'separator' },
         {
           label: 'Indent',
           id: 'format-indent',
           accelerator: 'Tab',
-          click: () => sendToRenderer('menu-format-indent')
+          click: async () => sendToRenderer('menu-format-indent')
         },
         {
           label: 'Outdent',
           id: 'format-outdent',
           accelerator: 'Shift+Tab',
-          click: () => sendToRenderer('menu-format-outdent')
+          click: async () => sendToRenderer('menu-format-outdent')
         },
         {
           label: 'Heading',
           id: 'format-heading',
           accelerator: 'CmdOrCtrl+Shift+H',
-          click: () => sendToRenderer('menu-format-heading')
+          click: async () => sendToRenderer('menu-format-heading')
         },
         {
           label: 'Code Block',
           id: 'format-code-block',
           accelerator: 'CmdOrCtrl+Shift+K',
-          click: () => sendToRenderer('menu-format-code-block')
+          click: async () => sendToRenderer('menu-format-code-block')
         }
       ]
     },
@@ -317,6 +325,13 @@ const updateMenuState = (menu = Menu.getApplicationMenu()) => {
 app.whenReady().then(async () => {
   await loadRecents();
   await loadLastFile();
+  if (process.platform === 'darwin' && app.dock && app.dock.setIcon) {
+    try {
+      app.dock.setIcon(appIconPath);
+    } catch {
+      // ignore dock icon failures in dev
+    }
+  }
   await createWindow();
   buildMenu();
 
