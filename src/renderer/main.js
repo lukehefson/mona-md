@@ -16,9 +16,6 @@ const previewPane = document.getElementById('preview');
 const previewContent = document.getElementById('preview-content');
 const modal = document.getElementById('modal');
 const modalClose = document.getElementById('modal-close');
-const settingsModal = document.getElementById('settings-modal');
-const settingsClose = document.getElementById('settings-close');
-const darkModeToggle = document.getElementById('dark-mode-toggle');
 
 let currentFilePath = null;
 let tempFilePath = null;
@@ -93,6 +90,7 @@ const view = new EditorView({
       history(),
       indentUnit.of('    '),
       markdown(),
+      EditorView.lineWrapping,
       syntaxHighlighting(markdownHighlight),
       keymap.of([
         ...markdownKeymap,
@@ -304,20 +302,6 @@ const hideShortcuts = () => {
   view.focus();
 };
 
-const showSettings = () => {
-  settingsModal.classList.remove('hidden');
-  settingsClose.focus();
-};
-
-const hideSettings = () => {
-  settingsModal.classList.add('hidden');
-  view.focus();
-};
-
-const applyTheme = (mode) => {
-  document.body.classList.toggle('theme-dark', mode === 'dark');
-  localStorage.setItem('mona-theme', mode);
-};
 
 const clearRecents = async () => {
   await window.mona.clearRecents();
@@ -343,7 +327,6 @@ window.mona.onMenu('menu-open-recent', openRecent);
 window.mona.onMenu('menu-clear-recents', clearRecents);
 window.mona.onMenu('menu-discard-draft', discardDraft);
 window.mona.onMenu('menu-new', discardDraft);
-window.mona.onMenu('menu-settings', showSettings);
 window.mona.onMenu('menu-format-bold', () => wrapSelection('**', '**')(view));
 window.mona.onMenu('menu-format-italic', () => wrapSelection('_', '_')(view));
 window.mona.onMenu('menu-format-strike', () => wrapSelection('~~', '~~')(view));
@@ -362,13 +345,6 @@ modalClose.addEventListener('click', hideShortcuts);
 modal.addEventListener('click', (event) => {
   if (event.target === modal) hideShortcuts();
 });
-settingsClose.addEventListener('click', hideSettings);
-settingsModal.addEventListener('click', (event) => {
-  if (event.target === settingsModal) hideSettings();
-});
-darkModeToggle.addEventListener('change', () => {
-  applyTheme(darkModeToggle.checked ? 'dark' : 'light');
-});
 
 window.addEventListener('keydown', (event) => {
   if (event.key === '?' && isPreview) {
@@ -377,9 +353,6 @@ window.addEventListener('keydown', (event) => {
   }
   if (event.key === 'Escape' && !modal.classList.contains('hidden')) {
     hideShortcuts();
-  }
-  if (event.key === 'Escape' && !settingsModal.classList.contains('hidden')) {
-    hideSettings();
   }
 });
 
@@ -421,7 +394,3 @@ const loadLastIfAvailable = async () => {
     await loadLastIfAvailable();
   }
 })();
-
-const initialTheme = localStorage.getItem('mona-theme') || 'light';
-applyTheme(initialTheme);
-darkModeToggle.checked = initialTheme === 'dark';

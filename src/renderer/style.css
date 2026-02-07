@@ -11,16 +11,6 @@
   --overlay: rgba(11, 11, 11, 0.4);
 }
 
-body.theme-dark {
-  color-scheme: dark;
-  --bg: #0d1117;
-  --text: #c9d1d9;
-  --muted: #8b949e;
-  --border: #30363d;
-  --accent: #58a6ff;
-  --accent-light: #79c0ff;
-  --overlay: rgba(1, 4, 9, 0.6);
-}
 
 * {
   box-sizing: border-box;
@@ -123,22 +113,6 @@ html, body {
   background: transparent;
 }
 
-body.theme-dark .markdown-body {
-  background-color: transparent !important;
-  color: var(--text) !important;
-}
-
-body.theme-dark .preview {
-  background-color: var(--bg);
-}
-
-body.theme-dark .preview .markdown-body {
-  background-color: var(--bg) !important;
-}
-
-body.theme-dark .markdown-body {
-  background-color: var(--bg) !important;
-}
 
 .preview .markdown-body a {
   color: var(--accent);
@@ -289,48 +263,6 @@ body.theme-dark .markdown-body {
   color: var(--accent);
 }
 
-.setting-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 14px;
-  color: var(--text);
-  padding: 6px 0;
-}
-
-.setting-row input[type="checkbox"] {
-  width: 40px;
-  height: 22px;
-  appearance: none;
-  background: color-mix(in srgb, var(--bg) 80%, #ffffff 20%);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  position: relative;
-  cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease;
-}
-
-.setting-row input[type="checkbox"]::after {
-  content: "";
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  background: var(--text);
-  border-radius: 50%;
-  transition: transform 0.2s ease, background 0.2s ease;
-}
-
-.setting-row input[type="checkbox"]:checked {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-
-.setting-row input[type="checkbox"]:checked::after {
-  transform: translateX(18px);
-  background: #0d1117;
-}
 
 .markdown-body {
   padding-bottom: 80px;

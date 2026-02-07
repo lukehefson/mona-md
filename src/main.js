@@ -107,12 +107,6 @@ const buildMenu = () => {
       label: 'Mona MD',
       submenu: [
         { role: 'about' },
-        {
-          role: 'preferences',
-          label: 'Settings…',
-          accelerator: 'CmdOrCtrl+,',
-          click: () => sendToRenderer('menu-settings')
-        },
         { type: 'separator' },
         { role: 'services' },
         { type: 'separator' },
@@ -146,7 +140,11 @@ const buildMenu = () => {
         {
           label: 'Close',
           accelerator: 'CmdOrCtrl+W',
-          role: 'close'
+          click: () => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.close();
+            }
+          }
         },
         {
           label: 'Save',
