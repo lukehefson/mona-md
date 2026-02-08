@@ -8,7 +8,9 @@
   "scripts": {
     "dev": "concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && electron .\"",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
   },
   "dependencies": {
     "@codemirror/commands": "^6.3.3",
@@ -29,7 +31,22 @@
   "devDependencies": {
     "concurrently": "^8.2.2",
     "electron": "^29.1.0",
+    "electron-builder": "^26.7.0",
     "vite": "^5.1.4",
     "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.lukehefson.mona-md",
+    "productName": "Mona MD",
+    "files": [
+      "dist/renderer/**",
+      "src/main.js",
+      "src/preload.cjs",
+      "package.json",
+      "icon.png"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity"
+    }
   }
 }

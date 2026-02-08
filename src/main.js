@@ -6,10 +6,7 @@ import path from 'path';
 const isDev = !app.isPackaged;
 app.setName('Mona MD');
 app.name = 'Mona MD';
-const appIconPath = path.join(
-  app.getAppPath(),
-  'AppIcons/Assets.xcassets/AppIcon.appiconset/1024.png'
-);
+const appIconPath = path.join(app.getAppPath(), 'icon.png');
 
 let mainWindow;
 let recents = [];
@@ -286,7 +283,20 @@ const buildMenu = () => {
       role: 'window',
       submenu: [
         { role: 'minimize' },
-        { role: 'zoom' }
+        { role: 'zoom' },
+        { type: 'separator' },
+        {
+          label: 'Enter Full Screen',
+          accelerator: 'Ctrl+Cmd+F',
+          click: async () => {
+            if (!mainWindow || mainWindow.isDestroyed()) {
+              await createWindow();
+            }
+            if (mainWindow) {
+              mainWindow.setFullScreen(!mainWindow.isFullScreen());
+            }
+          }
+        }
       ]
     }
   ];
@@ -325,7 +335,7 @@ const updateMenuState = (menu = Menu.getApplicationMenu()) => {
 app.whenReady().then(async () => {
   await loadRecents();
   await loadLastFile();
-  if (process.platform === 'darwin' && app.dock && app.dock.setIcon) {
+  if (isDev && process.platform === 'darwin' && app.dock && app.dock.setIcon) {
     try {
       app.dock.setIcon(appIconPath);
     } catch {
@@ -414,6 +424,13 @@ ipcMain.handle('temp:clear', async () => {
 });
 
 ipcMain.handle('temp:path', async () => tempPath());
+
+ipcMain.handle('window:exit-fullscreen', async () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setFullScreen(false);
+  }
+  return true;
+});
 
 ipcMain.on('preview:state', (_event, nextState) => {
   isPreview = Boolean(nextState);

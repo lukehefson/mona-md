@@ -354,6 +354,9 @@ window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !modal.classList.contains('hidden')) {
     hideShortcuts();
   }
+  if (event.key === 'Escape') {
+    window.mona.exitFullscreen();
+  }
 });
 
 updateTitle();

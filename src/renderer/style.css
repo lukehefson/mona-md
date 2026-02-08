@@ -34,12 +34,14 @@ html, body {
   height: 100%;
   padding: 56px 72px 96px;
   background: var(--bg);
+  -webkit-app-region: drag;
 }
 
 .editor,
 .preview {
   height: 100%;
   background: var(--bg);
+  -webkit-app-region: no-drag;
 }
 
 .hidden {
@@ -194,6 +196,7 @@ html, body {
   justify-content: center;
   background: var(--overlay);
   z-index: 10;
+  -webkit-app-region: no-drag;
 }
 
 .modal-card {

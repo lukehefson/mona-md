@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('mona', {
   loadTemp: () => ipcRenderer.invoke('temp:load'),
   clearTemp: () => ipcRenderer.invoke('temp:clear'),
   getTempPath: () => ipcRenderer.invoke('temp:path'),
+  exitFullscreen: () => ipcRenderer.invoke('window:exit-fullscreen'),
   setPreviewState: (state) => ipcRenderer.send('preview:state', state),
   onMenu: (channel, handler) => {
     ipcRenderer.on(channel, (_event, payload) => handler(payload));
