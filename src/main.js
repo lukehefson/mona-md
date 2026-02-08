@@ -57,7 +57,7 @@ const createWindow = async () => {
     width: 1200,
     height: 900,
     backgroundColor: '#ffffff',
-    titleBarStyle: 'hiddenInset',
+    titleBarStyle: 'default',
     icon: appIconPath,
     webPreferences: {
       preload: path.join(app.getAppPath(), 'src/preload.cjs'),
@@ -424,6 +424,23 @@ ipcMain.handle('temp:clear', async () => {
 });
 
 ipcMain.handle('temp:path', async () => tempPath());
+
+ipcMain.handle('window:title', async (_event, payload) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  const { title, filePath, edited } = payload || {};
+  if (typeof title === 'string') {
+    mainWindow.setTitle(title);
+  }
+  if (typeof edited === 'boolean') {
+    mainWindow.setDocumentEdited(edited);
+  }
+  if (filePath) {
+    mainWindow.setRepresentedFilename(filePath);
+  } else {
+    mainWindow.setRepresentedFilename('');
+  }
+  return true;
+});
 
 ipcMain.handle('window:exit-fullscreen', async () => {
   if (mainWindow && !mainWindow.isDestroyed()) {

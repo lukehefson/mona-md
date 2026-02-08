@@ -25,7 +25,13 @@ let autosaveTimer = null;
 
 const updateTitle = () => {
   const name = currentFilePath ? currentFilePath.split('/').pop() : 'Untitled';
-  document.title = isDirty ? `${name} •` : name;
+  const title = isDirty ? `${name} •` : name;
+  document.title = title;
+  window.mona.setWindowTitle({
+    title,
+    filePath: currentFilePath,
+    edited: isDirty
+  });
 };
 
 const setDirty = (dirty) => {
