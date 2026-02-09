@@ -34,7 +34,7 @@ html, body {
   height: 100%;
   padding: 56px 72px 96px;
   background: var(--bg);
-  -webkit-app-region: drag;
+  -webkit-app-region: no-drag;
 }
 
 .editor,

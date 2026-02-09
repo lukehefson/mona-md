@@ -45,8 +45,16 @@
       "package.json",
       "icon.png"
     ],
+    "fileAssociations": [
+      {
+        "ext": ["md", "markdown", "mdx", "txt"],
+        "name": "Markdown Document",
+        "role": "Editor"
+      }
+    ],
     "mac": {
-      "category": "public.app-category.productivity"
+      "category": "public.app-category.productivity",
+      "icon": "icon.png"
     }
   }
 }

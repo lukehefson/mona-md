@@ -333,6 +333,7 @@ window.mona.onMenu('menu-open-recent', openRecent);
 window.mona.onMenu('menu-clear-recents', clearRecents);
 window.mona.onMenu('menu-discard-draft', discardDraft);
 window.mona.onMenu('menu-new', discardDraft);
+window.mona.onMenu('menu-open-path', openRecent);
 window.mona.onMenu('menu-format-bold', () => wrapSelection('**', '**')(view));
 window.mona.onMenu('menu-format-italic', () => wrapSelection('_', '_')(view));
 window.mona.onMenu('menu-format-strike', () => wrapSelection('~~', '~~')(view));

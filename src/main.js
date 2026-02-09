@@ -12,6 +12,8 @@ let mainWindow;
 let recents = [];
 let isPreview = false;
 let lastFilePath = null;
+let pendingOpenPath = null;
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 const recentsPath = () => path.join(app.getPath('userData'), 'recents.json');
 const tempPath = () => path.join(app.getPath('userData'), 'untitled.md');
@@ -85,6 +87,11 @@ const sendToRenderer = async (channel, payload) => {
   const contents = mainWindow?.webContents;
   if (!contents || contents.isDestroyed()) return;
   contents.send(channel, payload);
+};
+
+const openFilePath = async (filePath) => {
+  if (!filePath) return;
+  await sendToRenderer('menu-open-path', filePath);
 };
 
 
@@ -344,6 +351,10 @@ app.whenReady().then(async () => {
   }
   await createWindow();
   buildMenu();
+  if (pendingOpenPath) {
+    await openFilePath(pendingOpenPath);
+    pendingOpenPath = null;
+  }
 
   app.on('activate', async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -355,6 +366,30 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
+  }
+});
+
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', async (_event, argv) => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+    const fileArg = argv.find((arg) => arg.endsWith('.md') || arg.endsWith('.markdown') || arg.endsWith('.mdx') || arg.endsWith('.txt'));
+    if (fileArg) {
+      await openFilePath(fileArg);
+    }
+  });
+}
+
+app.on('open-file', async (event, filePath) => {
+  event.preventDefault();
+  if (app.isReady()) {
+    await openFilePath(filePath);
+  } else {
+    pendingOpenPath = filePath;
   }
 });
 
