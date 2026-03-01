@@ -28,6 +28,7 @@ html, body {
 .app {
   height: 100%;
   background: var(--bg);
+  position: relative;
 }
 
 .main {
@@ -41,6 +42,20 @@ html, body {
 .preview {
   height: 100%;
   background: var(--bg);
+  -webkit-app-region: no-drag;
+}
+
+.preview {
+  overflow: auto;
+}
+
+.titlebar-hit-area {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  z-index: 2;
   -webkit-app-region: no-drag;
 }
 

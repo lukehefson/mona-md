@@ -484,6 +484,16 @@ ipcMain.handle('window:exit-fullscreen', async () => {
   return true;
 });
 
+ipcMain.handle('window:toggle-maximize', async () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  if (mainWindow.isMaximized()) {
+    mainWindow.unmaximize();
+  } else {
+    mainWindow.maximize();
+  }
+  return true;
+});
+
 ipcMain.on('preview:state', (_event, nextState) => {
   isPreview = Boolean(nextState);
   updateMenuState();

@@ -16,6 +16,7 @@ const previewPane = document.getElementById('preview');
 const previewContent = document.getElementById('preview-content');
 const modal = document.getElementById('modal');
 const modalClose = document.getElementById('modal-close');
+const titlebarHitArea = document.getElementById('titlebar-hit-area');
 
 let currentFilePath = null;
 let tempFilePath = null;
@@ -120,12 +121,18 @@ const view = new EditorView({
 });
 
 const togglePreviewState = (nextState) => {
-  isPreview = nextState;
+  const nextPreviewState = Boolean(nextState);
+  if (nextPreviewState === isPreview) return;
+  const currentRatio = isPreview ? getScrollRatio(previewPane) : getScrollRatio(getEditorScroller());
+  isPreview = nextPreviewState;
   previewPane.classList.toggle('hidden', !isPreview);
   editorHost.classList.toggle('hidden', isPreview);
   window.mona.setPreviewState(isPreview);
   if (isPreview) {
     refreshPreview();
+    requestAnimationFrame(() => setScrollRatio(previewPane, currentRatio));
+  } else {
+    requestAnimationFrame(() => setScrollRatio(getEditorScroller(), currentRatio));
   }
 };
 
@@ -136,6 +143,7 @@ function togglePreview() {
 
 function refreshPreview() {
   previewContent.innerHTML = md.render(view.state.doc.toString());
+  addHeadingIds(previewContent);
 }
 
 function wrapSelection(prefix, suffix) {
@@ -249,6 +257,55 @@ function isUrl(value) {
   }
 }
 
+function getEditorScroller() {
+  return editorHost.querySelector('.cm-scroller');
+}
+
+function getScrollRatio(element) {
+  if (!element) return 0;
+  const maxScroll = element.scrollHeight - element.clientHeight;
+  if (maxScroll <= 0) return 0;
+  return element.scrollTop / maxScroll;
+}
+
+function setScrollRatio(element, ratio) {
+  if (!element) return;
+  const maxScroll = element.scrollHeight - element.clientHeight;
+  if (maxScroll <= 0) return;
+  const safeRatio = Math.max(0, Math.min(1, ratio));
+  element.scrollTop = maxScroll * safeRatio;
+}
+
+function slugifyHeading(text) {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+}
+
+function addHeadingIds(root) {
+  const usedIds = new Set();
+  root.querySelectorAll('[id]').forEach((node) => usedIds.add(node.id));
+  root.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((heading) => {
+    if (heading.id) {
+      usedIds.add(heading.id);
+      return;
+    }
+    const base = slugifyHeading(heading.textContent || '');
+    if (!base) return;
+    let candidate = base;
+    let suffix = 2;
+    while (usedIds.has(candidate)) {
+      candidate = `${base}-${suffix}`;
+      suffix += 1;
+    }
+    heading.id = candidate;
+    usedIds.add(candidate);
+  });
+}
+
 const openFile = async () => {
   const result = await window.mona.openFile();
   if (!result) return;
@@ -351,6 +408,25 @@ window.mona.onMenu('menu-format-code-block', () => insertCodeBlock(view));
 modalClose.addEventListener('click', hideShortcuts);
 modal.addEventListener('click', (event) => {
   if (event.target === modal) hideShortcuts();
+});
+
+titlebarHitArea.addEventListener('dblclick', () => {
+  window.mona.toggleMaximize();
+});
+
+previewContent.addEventListener('click', (event) => {
+  const anchor = event.target.closest('a[href^="#"]');
+  if (!anchor) return;
+  const hash = anchor.getAttribute('href') || '';
+  const targetId = decodeURIComponent(hash.slice(1));
+  if (!targetId) return;
+  const target = previewContent.querySelector(`#${CSS.escape(targetId)}`);
+  if (!target) return;
+  event.preventDefault();
+  target.scrollIntoView({ block: 'start' });
+  if (history.replaceState) {
+    history.replaceState(null, '', `#${targetId}`);
+  }
 });
 
 window.addEventListener('keydown', (event) => {
