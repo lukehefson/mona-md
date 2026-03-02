@@ -15,6 +15,11 @@ contextBridge.exposeInMainWorld('mona', {
   toggleMaximize: () => ipcRenderer.invoke('window:toggle-maximize'),
   setWindowTitle: (payload) => ipcRenderer.invoke('window:title', payload),
   setPreviewState: (state) => ipcRenderer.send('preview:state', state),
+  findInPage: (text, options) => ipcRenderer.invoke('find:start', text, options),
+  stopFindInPage: () => ipcRenderer.invoke('find:stop'),
+  onFindResult: (handler) => {
+    ipcRenderer.on('find-result', (_event, payload) => handler(payload));
+  },
   onMenu: (channel, handler) => {
     ipcRenderer.on(channel, (_event, payload) => handler(payload));
   }

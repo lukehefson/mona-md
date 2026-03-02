@@ -17,12 +17,19 @@ const previewContent = document.getElementById('preview-content');
 const modal = document.getElementById('modal');
 const modalClose = document.getElementById('modal-close');
 const titlebarHitArea = document.getElementById('titlebar-hit-area');
+const findbar = document.getElementById('findbar');
+const findInput = document.getElementById('find-input');
+const findStatus = document.getElementById('find-status');
+const findPrev = document.getElementById('find-prev');
+const findNext = document.getElementById('find-next');
+const findClose = document.getElementById('find-close');
 
 let currentFilePath = null;
 let tempFilePath = null;
 let isPreview = false;
 let isDirty = false;
 let autosaveTimer = null;
+let currentFindQuery = '';
 
 const updateTitle = () => {
   const name = currentFilePath ? currentFilePath.split('/').pop() : 'Untitled';
@@ -306,6 +313,43 @@ function addHeadingIds(root) {
   });
 }
 
+const showFindBar = () => {
+  findbar.classList.remove('hidden');
+  findInput.focus({ preventScroll: true });
+  const len = findInput.value.length;
+  findInput.setSelectionRange(len, len);
+  updateFindStatus();
+};
+
+const hideFindBar = async () => {
+  findbar.classList.add('hidden');
+  await window.mona.stopFindInPage();
+  view.focus();
+};
+
+const updateFindStatus = (matches, active) => {
+  if (!currentFindQuery) {
+    findStatus.textContent = '';
+    return;
+  }
+  if (typeof matches === 'number' && matches > 0) {
+    findStatus.textContent = `${active}/${matches}`;
+    return;
+  }
+  if (typeof matches === 'number') {
+    findStatus.textContent = '0/0';
+    return;
+  }
+  findStatus.textContent = '...';
+};
+
+const runFind = async ({ forward = true, findNext: nextMatch = false } = {}) => {
+  const query = findInput.value.trim();
+  currentFindQuery = query;
+  updateFindStatus();
+  await window.mona.findInPage(query, { forward, findNext: nextMatch });
+};
+
 const openFile = async () => {
   const result = await window.mona.openFile();
   if (!result) return;
@@ -404,6 +448,18 @@ window.mona.onMenu('menu-format-indent', () => indentMore(view));
 window.mona.onMenu('menu-format-outdent', () => indentLess(view));
 window.mona.onMenu('menu-format-heading', () => toggleHeading(2)(view));
 window.mona.onMenu('menu-format-code-block', () => insertCodeBlock(view));
+window.mona.onMenu('menu-find', showFindBar);
+window.mona.onMenu('menu-find-next', () => {
+  if (findbar.classList.contains('hidden')) showFindBar();
+  runFind({ forward: true, findNext: true });
+});
+window.mona.onMenu('menu-find-prev', () => {
+  if (findbar.classList.contains('hidden')) showFindBar();
+  runFind({ forward: false, findNext: true });
+});
+window.mona.onFindResult((result) => {
+  updateFindStatus(result?.matches, result?.activeMatchOrdinal);
+});
 
 modalClose.addEventListener('click', hideShortcuts);
 modal.addEventListener('click', (event) => {
@@ -429,13 +485,34 @@ previewContent.addEventListener('click', (event) => {
   }
 });
 
+findInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    runFind({ forward: !event.shiftKey, findNext: true });
+  }
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    hideFindBar();
+  }
+});
+findPrev.addEventListener('click', () => runFind({ forward: false, findNext: true }));
+findNext.addEventListener('click', () => runFind({ forward: true, findNext: true }));
+findClose.addEventListener('click', hideFindBar);
+
 window.addEventListener('keydown', (event) => {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
+    event.preventDefault();
+    showFindBar();
+  }
   if (event.key === '?' && isPreview) {
     event.preventDefault();
     showShortcuts();
   }
   if (event.key === 'Escape' && !modal.classList.contains('hidden')) {
     hideShortcuts();
+  }
+  if (event.key === 'Escape' && !findbar.classList.contains('hidden')) {
+    hideFindBar();
   }
   if (event.key === 'Escape') {
     window.mona.exitFullscreen();

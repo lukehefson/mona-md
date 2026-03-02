@@ -78,6 +78,11 @@ const createWindow = async () => {
     shell.openExternal(url);
     return { action: 'deny' };
   });
+
+  mainWindow.webContents.on('found-in-page', (_event, result) => {
+    const { requestId, activeMatchOrdinal, matches, finalUpdate } = result;
+    sendToRenderer('find-result', { requestId, activeMatchOrdinal, matches, finalUpdate });
+  });
 };
 
 const sendToRenderer = async (channel, payload) => {
@@ -191,7 +196,23 @@ const buildMenu = () => {
         { role: 'cut' },
         { role: 'copy' },
         { role: 'paste' },
-        { role: 'selectAll' }
+        { role: 'selectAll' },
+        { type: 'separator' },
+        {
+          label: 'Find',
+          accelerator: 'CmdOrCtrl+F',
+          click: async () => sendToRenderer('menu-find')
+        },
+        {
+          label: 'Find Next',
+          accelerator: 'CmdOrCtrl+G',
+          click: async () => sendToRenderer('menu-find-next')
+        },
+        {
+          label: 'Find Previous',
+          accelerator: 'Shift+CmdOrCtrl+G',
+          click: async () => sendToRenderer('menu-find-prev')
+        }
       ]
     },
     {
@@ -491,6 +512,28 @@ ipcMain.handle('window:toggle-maximize', async () => {
   } else {
     mainWindow.maximize();
   }
+  return true;
+});
+
+ipcMain.handle('find:start', async (_event, text, options = {}) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  const query = String(text || '').trim();
+  if (!query) {
+    mainWindow.webContents.stopFindInPage('clearSelection');
+    return false;
+  }
+  const { forward = true, findNext = false } = options;
+  mainWindow.webContents.findInPage(query, {
+    forward: Boolean(forward),
+    findNext: Boolean(findNext),
+    matchCase: false
+  });
+  return true;
+});
+
+ipcMain.handle('find:stop', async () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  mainWindow.webContents.stopFindInPage('clearSelection');
   return true;
 });
 
