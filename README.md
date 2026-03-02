@@ -25,16 +25,9 @@ npm run pack
 This creates an unpacked `.app` bundle at:
 
 ```text
-dist/mac-arm64/Mona MD.app
+/Users/lukehefson/Projects/mona-md/dist/mac-arm64/
 ```
 
-Then replace the installed app:
-
-```bash
-pkill -f "Mona MD" || true
-rm -rf "/Applications/Mona MD.app"
-cp -R "dist/mac-arm64/Mona MD.app" "/Applications/Mona MD.app"
-open "/Applications/Mona MD.app"
-```
+Then replace the installed app in `/Applications`.
 
 If Finder/Dock still shows an old icon or stale app state, remove and re-add the app in Dock.
