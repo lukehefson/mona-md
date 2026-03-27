@@ -415,7 +415,7 @@ app.on('open-file', async (event, filePath) => {
 });
 
 ipcMain.handle('dialog:open', async () => {
-  const { canceled, filePaths } = await dialog.showOpenDialog({
+  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'],
     filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdx', 'txt'] }]
   });
@@ -429,8 +429,9 @@ ipcMain.handle('dialog:open', async () => {
 });
 
 ipcMain.handle('dialog:save', async (_event, defaultPath) => {
-  const { canceled, filePath } = await dialog.showSaveDialog({
-    defaultPath,
+  const safeDefault = defaultPath || path.join(app.getPath('documents'), 'Untitled.md');
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+    defaultPath: safeDefault,
     filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }]
   });
 
