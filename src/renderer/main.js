@@ -376,7 +376,7 @@ const openRecent = async (filePath) => {
 };
 
 const saveFileAs = async () => {
-  const defaultPath = currentFilePath || 'README.md';
+  const defaultPath = currentFilePath || null;
   const filePath = await window.mona.saveDialog(defaultPath);
   if (!filePath) return false;
   currentFilePath = filePath;
