@@ -25,21 +25,15 @@ const findNext = document.getElementById('find-next');
 const findClose = document.getElementById('find-close');
 
 let currentFilePath = null;
-let tempFilePath = null;
 let isPreview = false;
 let isDirty = false;
-let autosaveTimer = null;
 let currentFindQuery = '';
 
 const updateTitle = () => {
   const name = currentFilePath ? currentFilePath.split('/').pop() : 'Untitled';
   const title = isDirty ? `${name} •` : name;
   document.title = title;
-  window.mona.setWindowTitle({
-    title,
-    filePath: currentFilePath,
-    edited: isDirty
-  });
+  syncDocumentState();
 };
 
 const setDirty = (dirty) => {
@@ -47,14 +41,13 @@ const setDirty = (dirty) => {
   updateTitle();
 };
 
-const scheduleAutosave = () => {
-  const targetPath = currentFilePath || tempFilePath;
-  if (!targetPath) return;
-  if (autosaveTimer) clearTimeout(autosaveTimer);
-  autosaveTimer = setTimeout(async () => {
-    await window.mona.writeFile(targetPath, view.state.doc.toString());
-    setDirty(false);
-  }, 800);
+const syncDocumentState = () => {
+  window.mona.updateDocumentState({
+    filePath: currentFilePath,
+    content: view.state.doc.toString(),
+    isDirty,
+    isPreview
+  });
 };
 
 const md = new MarkdownIt({
@@ -105,6 +98,11 @@ const view = new EditorView({
       indentUnit.of('    '),
       markdown(),
       EditorView.lineWrapping,
+      EditorView.contentAttributes.of({
+        spellcheck: 'true',
+        autocorrect: 'on',
+        autocapitalize: 'sentences'
+      }),
       syntaxHighlighting(markdownHighlight),
       keymap.of([
         ...markdownKeymap,
@@ -117,7 +115,6 @@ const view = new EditorView({
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
           setDirty(true);
-          scheduleAutosave();
           if (isPreview) {
             refreshPreview();
           }
@@ -134,7 +131,7 @@ const togglePreviewState = (nextState) => {
   isPreview = nextPreviewState;
   previewPane.classList.toggle('hidden', !isPreview);
   editorHost.classList.toggle('hidden', isPreview);
-  window.mona.setPreviewState(isPreview);
+  syncDocumentState();
   if (isPreview) {
     refreshPreview();
     requestAnimationFrame(() => setScrollRatio(previewPane, currentRatio));
@@ -350,52 +347,14 @@ const runFind = async ({ forward = true, findNext: nextMatch = false } = {}) => 
   await window.mona.findInPage(query, { forward, findNext: nextMatch });
 };
 
-const openFile = async () => {
-  const result = await window.mona.openFile();
-  if (!result) return;
-  currentFilePath = result.filePath;
-  tempFilePath = null;
-  view.dispatch({
-    changes: { from: 0, to: view.state.doc.length, insert: result.content }
-  });
-  setDirty(false);
-  togglePreviewState(false);
-};
-
-const openRecent = async (filePath) => {
-  if (!filePath) return;
-  const result = await window.mona.readFile(filePath);
-  if (!result) return;
-  currentFilePath = result.filePath;
-  tempFilePath = null;
-  view.dispatch({
-    changes: { from: 0, to: view.state.doc.length, insert: result.content }
-  });
-  setDirty(false);
-  togglePreviewState(false);
-};
-
-const saveFileAs = async () => {
-  const defaultPath = currentFilePath || null;
-  const filePath = await window.mona.saveDialog(defaultPath);
-  if (!filePath) return false;
+const loadDocument = ({ filePath, content }) => {
   currentFilePath = filePath;
-  tempFilePath = null;
-  await window.mona.writeFile(filePath, view.state.doc.toString());
-  await window.mona.addRecent(filePath);
-  await window.mona.clearTemp();
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: content ?? '' }
+  });
   setDirty(false);
-  return true;
-};
-
-const saveFile = async () => {
-  if (!currentFilePath) {
-    return saveFileAs();
-  }
-  await window.mona.writeFile(currentFilePath, view.state.doc.toString());
-  await window.mona.addRecent(currentFilePath);
-  setDirty(false);
-  return true;
+  togglePreviewState(false);
+  view.focus();
 };
 
 const showShortcuts = () => {
@@ -409,32 +368,8 @@ const hideShortcuts = () => {
   view.focus();
 };
 
-
-const clearRecents = async () => {
-  await window.mona.clearRecents();
-};
-
-const discardDraft = async () => {
-  currentFilePath = null;
-  tempFilePath = await window.mona.getTempPath();
-  await window.mona.clearTemp();
-  view.dispatch({
-    changes: { from: 0, to: view.state.doc.length, insert: '' }
-  });
-  setDirty(false);
-  togglePreviewState(false);
-};
-
-window.mona.onMenu('menu-open', openFile);
-window.mona.onMenu('menu-save', saveFile);
-window.mona.onMenu('menu-save-as', saveFileAs);
 window.mona.onMenu('menu-toggle-preview', () => togglePreview());
 window.mona.onMenu('menu-show-shortcuts', showShortcuts);
-window.mona.onMenu('menu-open-recent', openRecent);
-window.mona.onMenu('menu-clear-recents', clearRecents);
-window.mona.onMenu('menu-discard-draft', discardDraft);
-window.mona.onMenu('menu-new', discardDraft);
-window.mona.onMenu('menu-open-path', openRecent);
 window.mona.onMenu('menu-format-bold', () => wrapSelection('**', '**')(view));
 window.mona.onMenu('menu-format-italic', () => wrapSelection('_', '_')(view));
 window.mona.onMenu('menu-format-strike', () => wrapSelection('~~', '~~')(view));
@@ -459,6 +394,11 @@ window.mona.onMenu('menu-find-prev', () => {
 });
 window.mona.onFindResult((result) => {
   updateFindStatus(result?.matches, result?.activeMatchOrdinal);
+});
+window.mona.onDocumentLoad(loadDocument);
+window.mona.onDocumentSaved(({ filePath }) => {
+  currentFilePath = filePath ?? null;
+  setDirty(false);
 });
 
 modalClose.addEventListener('click', hideShortcuts);
@@ -521,39 +461,4 @@ window.addEventListener('keydown', (event) => {
 
 updateTitle();
 view.focus();
-
-const loadTempDraft = async () => {
-  const tempResult = await window.mona.loadTemp();
-  if (tempResult?.content) {
-    tempFilePath = tempResult.filePath;
-    view.dispatch({
-      changes: { from: 0, to: view.state.doc.length, insert: tempResult.content }
-    });
-    setDirty(false);
-    return true;
-  } else {
-    tempFilePath = await window.mona.getTempPath();
-  }
-  return false;
-};
-
-const loadLastIfAvailable = async () => {
-  const lastPath = await window.mona.getLastFile();
-  if (!lastPath) return false;
-  const result = await window.mona.readFile(lastPath);
-  if (!result) return false;
-  currentFilePath = result.filePath;
-  tempFilePath = null;
-  view.dispatch({
-    changes: { from: 0, to: view.state.doc.length, insert: result.content }
-  });
-  setDirty(false);
-  return true;
-};
-
-(async () => {
-  const hasTemp = await loadTempDraft();
-  if (!hasTemp) {
-    await loadLastIfAvailable();
-  }
-})();
+syncDocumentState();

@@ -1,23 +1,34 @@
-import { app, BrowserWindow, dialog, Menu, shell, ipcMain } from 'electron';
-import { readFile, writeFile, unlink } from 'fs/promises';
+import { app, BrowserWindow, Menu, dialog, shell, ipcMain } from 'electron';
+import { readFile, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 
 const isDev = !app.isPackaged;
 app.setName('Mona MD');
 app.name = 'Mona MD';
+
 const appIconPath = path.join(app.getAppPath(), 'icon.png');
-
-let mainWindow;
-let recents = [];
-let isPreview = false;
-let lastFilePath = null;
-let pendingOpenPath = null;
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
-
 const recentsPath = () => path.join(app.getPath('userData'), 'recents.json');
-const tempPath = () => path.join(app.getPath('userData'), 'untitled.md');
-const lastPath = () => path.join(app.getPath('userData'), 'last.json');
+const supportedExtensions = ['md', 'markdown', 'mdx', 'txt'];
+
+let recents = [];
+let pendingOpenPaths = [];
+const windowState = new Map();
+
+const isSupportedDocument = (filePath = '') => {
+  const extension = path.extname(filePath).slice(1).toLowerCase();
+  return supportedExtensions.includes(extension);
+};
+
+const getWindowState = (window) => {
+  if (!window || window.isDestroyed()) return null;
+  return windowState.get(window.id) ?? null;
+};
+
+const getWindowFromEvent = (event) => BrowserWindow.fromWebContents(event.sender);
+
+const getFocusedWindow = () => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null;
 
 const loadRecents = async () => {
   try {
@@ -28,34 +39,164 @@ const loadRecents = async () => {
   }
 };
 
-const loadLastFile = async () => {
-  try {
-    const data = await readFile(lastPath(), 'utf8');
-    lastFilePath = JSON.parse(data)?.filePath ?? null;
-  } catch {
-    lastFilePath = null;
-  }
-};
-
 const saveRecents = async () => {
   await writeFile(recentsPath(), JSON.stringify(recents.slice(0, 10)), 'utf8');
-};
-
-const saveLastFile = async (filePath) => {
-  lastFilePath = filePath || null;
-  await writeFile(lastPath(), JSON.stringify({ filePath: lastFilePath }), 'utf8');
 };
 
 const addRecent = async (filePath) => {
   if (!filePath) return;
   recents = [filePath, ...recents.filter((entry) => entry !== filePath)];
   await saveRecents();
-  await saveLastFile(filePath);
   buildMenu();
 };
 
+const sendToWindow = (window, channel, payload) => {
+  if (!window || window.isDestroyed()) return;
+  window.webContents.send(channel, payload);
+};
+
+const updateWindowAppearance = (window) => {
+  const state = getWindowState(window);
+  if (!window || window.isDestroyed() || !state) return;
+
+  const name = state.filePath ? path.basename(state.filePath) : 'Untitled';
+  const title = state.isDirty ? `${name} •` : name;
+  window.setTitle(title);
+  window.setDocumentEdited(Boolean(state.isDirty));
+  window.setRepresentedFilename(state.filePath || '');
+};
+
+const registerWindow = (window) => {
+  windowState.set(window.id, {
+    filePath: null,
+    content: '',
+    isDirty: false,
+    isPreview: false,
+    closeInProgress: false,
+    closeApproved: false
+  });
+  updateWindowAppearance(window);
+};
+
+const createSpellcheckMenu = (window, params) => {
+  const template = [];
+
+  if (params.misspelledWord) {
+    const suggestions = params.dictionarySuggestions.slice(0, 6);
+    if (suggestions.length > 0) {
+      suggestions.forEach((suggestion) => {
+        template.push({
+          label: suggestion,
+          click: () => window.webContents.replaceMisspelling(suggestion)
+        });
+      });
+    } else {
+      template.push({ label: 'No Guesses Found', enabled: false });
+    }
+
+    template.push({ type: 'separator' });
+    template.push({
+      label: 'Ignore Spelling',
+      click: () => window.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord)
+    });
+    template.push({
+      label: 'Learn Spelling',
+      click: () => window.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord)
+    });
+    template.push({ type: 'separator' });
+  }
+
+  if (params.selectionText?.trim()) {
+    template.push({ role: 'cut' });
+    template.push({ role: 'copy' });
+  } else {
+    template.push({ role: 'copy' });
+  }
+
+  if (params.isEditable) {
+    template.push({ role: 'paste' });
+    template.push({ type: 'separator' });
+    template.push({
+      label: 'Spelling and Grammar',
+      submenu: [
+        { role: 'toggleSpellChecker' },
+        { role: 'showSubstitutions' },
+        { role: 'toggleTextReplacement' }
+      ]
+    });
+  }
+
+  return template;
+};
+
+const attachWindowHandlers = (window) => {
+  window.on('focus', () => buildMenu());
+  window.on('closed', () => {
+    windowState.delete(window.id);
+    buildMenu();
+  });
+
+  window.on('close', async (event) => {
+    const state = getWindowState(window);
+    if (!state || state.closeApproved || state.closeInProgress) return;
+    if (!state.isDirty) return;
+
+    event.preventDefault();
+    state.closeInProgress = true;
+
+    const isUntitled = !state.filePath;
+    const response = await dialog.showMessageBox(window, {
+      type: 'question',
+      buttons: isUntitled ? ['Save…', 'Delete', 'Cancel'] : ['Save', "Don't Save", 'Cancel'],
+      defaultId: 0,
+      cancelId: 2,
+      message: isUntitled
+        ? 'Do you want to keep this new document “Untitled”?'
+        : `Do you want to save the changes made to “${path.basename(state.filePath)}”?`,
+      detail: isUntitled
+        ? "You can save your changes or delete this document immediately. You can't undo this action."
+        : "Your changes will be lost if you don't save them."
+    });
+
+    let shouldClose = false;
+
+    if (response.response === 0) {
+      shouldClose = await saveWindow(window, { saveAs: isUntitled });
+    } else if (response.response === 1) {
+      shouldClose = true;
+    }
+
+    state.closeInProgress = false;
+
+    if (shouldClose && !window.isDestroyed()) {
+      state.closeApproved = true;
+      window.close();
+    }
+  });
+
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
+
+  window.webContents.on('found-in-page', (_event, result) => {
+    sendToWindow(window, 'find-result', {
+      requestId: result.requestId,
+      activeMatchOrdinal: result.activeMatchOrdinal,
+      matches: result.matches,
+      finalUpdate: result.finalUpdate
+    });
+  });
+
+  window.webContents.on('context-menu', (_event, params) => {
+    const template = createSpellcheckMenu(window, params);
+    if (template.length === 0) return;
+    Menu.buildFromTemplate(template).popup({ window });
+  });
+};
+
 const createWindow = async () => {
-  mainWindow = new BrowserWindow({
+  const window = new BrowserWindow({
     width: 1200,
     height: 900,
     backgroundColor: '#ffffff',
@@ -64,41 +205,124 @@ const createWindow = async () => {
     webPreferences: {
       preload: path.join(app.getAppPath(), 'src/preload.cjs'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      spellcheck: true
     }
   });
 
+  registerWindow(window);
+  attachWindowHandlers(window);
+
   if (isDev) {
-    await mainWindow.loadURL('http://localhost:5173');
+    await window.loadURL('http://localhost:5173');
   } else {
-    await mainWindow.loadFile(path.join(app.getAppPath(), 'dist/renderer/index.html'));
+    await window.loadFile(path.join(app.getAppPath(), 'dist/renderer/index.html'));
   }
 
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
-    return { action: 'deny' };
-  });
-
-  mainWindow.webContents.on('found-in-page', (_event, result) => {
-    const { requestId, activeMatchOrdinal, matches, finalUpdate } = result;
-    sendToRenderer('find-result', { requestId, activeMatchOrdinal, matches, finalUpdate });
-  });
+  return window;
 };
 
-const sendToRenderer = async (channel, payload) => {
-  if (!mainWindow || mainWindow.isDestroyed()) {
-    await createWindow();
+const loadDocumentIntoWindow = async (window, filePath) => {
+  if (!window || window.isDestroyed() || !filePath) return false;
+  const content = await readFile(filePath, 'utf8');
+  const state = getWindowState(window);
+  if (!state) return false;
+
+  state.filePath = filePath;
+  state.content = content;
+  state.isDirty = false;
+  updateWindowAppearance(window);
+  sendToWindow(window, 'document-load', { filePath, content });
+  await addRecent(filePath);
+  return true;
+};
+
+const chooseWindowForOpen = async () => {
+  const focused = getFocusedWindow();
+  const state = getWindowState(focused);
+
+  if (focused && state && !state.filePath && !state.isDirty && !state.content.trim()) {
+    return focused;
   }
-  const contents = mainWindow?.webContents;
-  if (!contents || contents.isDestroyed()) return;
-  contents.send(channel, payload);
+
+  return createWindow();
 };
 
-const openFilePath = async (filePath) => {
-  if (!filePath) return;
-  await sendToRenderer('menu-open-path', filePath);
+const promptForOpen = async (window) => {
+  const { canceled, filePaths } = await dialog.showOpenDialog(window, {
+    buttonLabel: 'Open',
+    properties: ['openFile'],
+    filters: [{ name: 'Markdown', extensions: supportedExtensions }]
+  });
+
+  if (canceled || filePaths.length === 0) return false;
+  return loadDocumentIntoWindow(window, filePaths[0]);
 };
 
+const promptStartupChoice = async (window) => {
+  if (!window || window.isDestroyed()) return;
+
+  const { response } = await dialog.showMessageBox(window, {
+    type: 'question',
+    buttons: ['Open…', 'New Document', 'Cancel'],
+    defaultId: 0,
+    cancelId: 2,
+    message: 'Open a Markdown document or create a new one?',
+    detail: 'Launch Mona MD with an existing file, start a new document, or cancel.'
+  });
+
+  if (response === 0) {
+    const didOpen = await promptForOpen(window);
+    if (!didOpen && !window.isDestroyed()) {
+      window.focus();
+    }
+    return;
+  }
+
+  if (response === 2 && !window.isDestroyed()) {
+    const state = getWindowState(window);
+    if (state) state.closeApproved = true;
+    window.close();
+  }
+};
+
+const saveWindow = async (window, { saveAs = false } = {}) => {
+  const state = getWindowState(window);
+  if (!window || window.isDestroyed() || !state) return false;
+
+  let targetPath = state.filePath;
+  if (saveAs || !targetPath) {
+    const defaultPath = targetPath || path.join(app.getPath('documents'), 'Untitled.md');
+    const { canceled, filePath } = await dialog.showSaveDialog(window, {
+      defaultPath,
+      filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }]
+    });
+
+    if (canceled || !filePath) return false;
+    targetPath = filePath;
+  }
+
+  await writeFile(targetPath, state.content, 'utf8');
+  state.filePath = targetPath;
+  state.isDirty = false;
+  updateWindowAppearance(window);
+  sendToWindow(window, 'document-saved', { filePath: targetPath });
+  await addRecent(targetPath);
+  return true;
+};
+
+const clearRecents = async () => {
+  recents = [];
+  await saveRecents();
+  buildMenu();
+};
+
+const sendToFocusedWindow = (channel, payload) => {
+  const window = getFocusedWindow();
+  if (window) {
+    sendToWindow(window, channel, payload);
+  }
+};
 
 const buildMenu = () => {
   const recentItems = recents
@@ -106,7 +330,10 @@ const buildMenu = () => {
     .slice(0, 10)
     .map((entry) => ({
       label: entry,
-      click: () => sendToRenderer('menu-open-recent', entry)
+      click: async () => {
+        const window = await chooseWindowForOpen();
+        await loadDocumentIntoWindow(window, entry);
+      }
     }));
 
   if (recentItems.length === 0) {
@@ -115,9 +342,12 @@ const buildMenu = () => {
     recentItems.push({ type: 'separator' });
     recentItems.push({
       label: 'Clear Recent',
-      click: () => sendToRenderer('menu-clear-recents')
+      click: clearRecents
     });
   }
+
+  const focusedState = getWindowState(getFocusedWindow());
+  const isPreview = Boolean(focusedState?.isPreview);
 
   const template = [
     {
@@ -140,50 +370,49 @@ const buildMenu = () => {
         {
           label: 'New',
           accelerator: 'CmdOrCtrl+N',
-          click: async () => sendToRenderer('menu-new')
+          click: async () => {
+            await createWindow();
+          }
         },
         {
           label: 'Open…',
           accelerator: 'CmdOrCtrl+O',
-          click: async () => sendToRenderer('menu-open')
+          click: async () => {
+            const window = await chooseWindowForOpen();
+            await promptForOpen(window);
+          }
         },
         {
           label: 'Open Recent',
           submenu: recentItems
         },
+        { type: 'separator' },
+        { role: 'close' },
         {
-          type: 'separator'
-        },
-        {
-          label: 'Close',
-          accelerator: 'CmdOrCtrl+W',
-          click: () => {
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.close();
+          label: 'Save',
+          accelerator: 'CmdOrCtrl+S',
+          click: async () => {
+            const window = getFocusedWindow();
+            if (window) {
+              await saveWindow(window);
             }
           }
         },
         {
-          label: 'Save',
-          accelerator: 'CmdOrCtrl+S',
-          click: async () => sendToRenderer('menu-save')
-        },
-        {
           label: 'Duplicate',
           accelerator: 'CmdOrCtrl+Shift+S',
-          click: async () => sendToRenderer('menu-save-as')
-        },
-        { type: 'separator' },
-        {
-          label: 'Discard Draft',
-          accelerator: 'CmdOrCtrl+Shift+D',
-          click: async () => sendToRenderer('menu-discard-draft')
+          click: async () => {
+            const window = getFocusedWindow();
+            if (window) {
+              await saveWindow(window, { saveAs: true });
+            }
+          }
         },
         { type: 'separator' },
         {
           label: 'Preview/Edit Markdown',
           accelerator: 'CmdOrCtrl+Shift+P',
-          click: async () => sendToRenderer('menu-toggle-preview')
+          click: () => sendToFocusedWindow('menu-toggle-preview')
         }
       ]
     },
@@ -201,18 +430,22 @@ const buildMenu = () => {
         {
           label: 'Find',
           accelerator: 'CmdOrCtrl+F',
-          click: async () => sendToRenderer('menu-find')
+          click: () => sendToFocusedWindow('menu-find')
         },
         {
           label: 'Find Next',
           accelerator: 'CmdOrCtrl+G',
-          click: async () => sendToRenderer('menu-find-next')
+          click: () => sendToFocusedWindow('menu-find-next')
         },
         {
           label: 'Find Previous',
           accelerator: 'Shift+CmdOrCtrl+G',
-          click: async () => sendToRenderer('menu-find-prev')
-        }
+          click: () => sendToFocusedWindow('menu-find-prev')
+        },
+        { type: 'separator' },
+        { role: 'toggleSpellChecker' },
+        { role: 'showSubstitutions' },
+        { role: 'toggleTextReplacement' }
       ]
     },
     {
@@ -222,88 +455,102 @@ const buildMenu = () => {
           label: 'Markdown Shortcuts',
           id: 'format-shortcuts',
           accelerator: '?',
-          click: async () => sendToRenderer('menu-show-shortcuts')
+          enabled: isPreview,
+          click: () => sendToFocusedWindow('menu-show-shortcuts')
         },
         { type: 'separator' },
         {
           label: 'Bold',
           id: 'format-bold',
           accelerator: 'CmdOrCtrl+B',
-          click: async () => sendToRenderer('menu-format-bold')
+          enabled: !isPreview,
+          click: () => sendToFocusedWindow('menu-format-bold')
         },
         {
           label: 'Italic',
           id: 'format-italic',
           accelerator: 'CmdOrCtrl+I',
-          click: async () => sendToRenderer('menu-format-italic')
+          enabled: !isPreview,
+          click: () => sendToFocusedWindow('menu-format-italic')
         },
         {
           label: 'Strikethrough',
           id: 'format-strike',
           accelerator: 'CmdOrCtrl+Shift+X',
-          click: async () => sendToRenderer('menu-format-strike')
+          enabled: !isPreview,
+          click: () => sendToFocusedWindow('menu-format-strike')
         },
         {
           label: 'Inline Code',
           id: 'format-code',
           accelerator: 'CmdOrCtrl+E',
-          click: async () => sendToRenderer('menu-format-code')
+          enabled: !isPreview,
+          click: () => sendToFocusedWindow('menu-format-code')
         },
         {
           label: 'Link',
           id: 'format-link',
           accelerator: 'CmdOrCtrl+K',
-          click: async () => sendToRenderer('menu-format-link')
+          enabled: !isPreview,
+          click: () => sendToFocusedWindow('menu-format-link')
         },
         { type: 'separator' },
         {
           label: 'Quote',
           id: 'format-quote',
           accelerator: 'CmdOrCtrl+Shift+.',
-          click: async () => sendToRenderer('menu-format-quote')
+          enabled: !isPreview,
+          click: () => sendToFocusedWindow('menu-format-quote')
         },
         {
           label: 'Unordered List',
           id: 'format-ul',
           accelerator: 'CmdOrCtrl+Shift+8',
-          click: async () => sendToRenderer('menu-format-ul')
+          enabled: !isPreview,
+          click: () => sendToFocusedWindow('menu-format-ul')
         },
         {
           label: 'Ordered List',
           id: 'format-ol',
           accelerator: 'CmdOrCtrl+Shift+7',
-          click: async () => sendToRenderer('menu-format-ol')
+          enabled: !isPreview,
+          click: () => sendToFocusedWindow('menu-format-ol')
         },
         {
           label: 'Task List',
           id: 'format-task',
           accelerator: 'CmdOrCtrl+Shift+9',
-          click: async () => sendToRenderer('menu-format-task')
+          enabled: !isPreview,
+          click: () => sendToFocusedWindow('menu-format-task')
         },
         { type: 'separator' },
         {
           label: 'Indent',
           id: 'format-indent',
           accelerator: 'Tab',
-          click: async () => sendToRenderer('menu-format-indent')
+          enabled: !isPreview,
+          click: () => sendToFocusedWindow('menu-format-indent')
         },
         {
           label: 'Outdent',
           id: 'format-outdent',
           accelerator: 'Shift+Tab',
-          click: async () => sendToRenderer('menu-format-outdent')
+          enabled: !isPreview,
+          click: () => sendToFocusedWindow('menu-format-outdent')
         },
         {
           label: 'Heading',
           id: 'format-heading',
           accelerator: 'CmdOrCtrl+Shift+H',
-          click: async () => sendToRenderer('menu-format-heading')
+          enabled: !isPreview,
+          click: () => sendToFocusedWindow('menu-format-heading')
         },
         {
           label: 'Code Block',
           id: 'format-code-block',
           accelerator: 'CmdOrCtrl+Shift+K',
-          click: async () => sendToRenderer('menu-format-code-block')
+          enabled: !isPreview,
+          click: () => sendToFocusedWindow('menu-format-code-block')
         }
       ]
     },
@@ -313,73 +560,82 @@ const buildMenu = () => {
         { role: 'minimize' },
         { role: 'zoom' },
         { type: 'separator' },
-        {
-          label: 'Enter Full Screen',
-          accelerator: 'Ctrl+Cmd+F',
-          click: async () => {
-            if (!mainWindow || mainWindow.isDestroyed()) {
-              await createWindow();
-            }
-            if (mainWindow) {
-              mainWindow.setFullScreen(!mainWindow.isFullScreen());
-            }
-          }
-        }
+        { role: 'front' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
       ]
     }
   ];
 
-  const menu = Menu.buildFromTemplate(template);
-  Menu.setApplicationMenu(menu);
-  updateMenuState(menu);
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 };
 
-const updateMenuState = (menu = Menu.getApplicationMenu()) => {
-  if (!menu) return;
-  const setEnabled = (id, enabled) => {
-    const item = menu.getMenuItemById(id);
-    if (item) item.enabled = enabled;
-  };
-
-  setEnabled('format-shortcuts', isPreview);
-  const formatEnabled = !isPreview;
-  [
-    'format-bold',
-    'format-italic',
-    'format-strike',
-    'format-code',
-    'format-link',
-    'format-quote',
-    'format-ul',
-    'format-ol',
-    'format-task',
-    'format-indent',
-    'format-outdent',
-    'format-heading',
-    'format-code-block'
-  ].forEach((id) => setEnabled(id, formatEnabled));
-};
-
-app.whenReady().then(async () => {
+const bootstrap = async () => {
   await loadRecents();
-  await loadLastFile();
-  if (isDev && process.platform === 'darwin' && app.dock && app.dock.setIcon) {
+
+  if (isDev && process.platform === 'darwin' && app.dock?.setIcon) {
     try {
       app.dock.setIcon(appIconPath);
     } catch {
-      // ignore dock icon failures in dev
+      // Ignore dock icon failures in dev.
     }
   }
-  await createWindow();
+
   buildMenu();
-  if (pendingOpenPath) {
-    await openFilePath(pendingOpenPath);
-    pendingOpenPath = null;
+
+  if (pendingOpenPaths.length > 0) {
+    for (const filePath of pendingOpenPaths) {
+      const window = await createWindow();
+      await loadDocumentIntoWindow(window, filePath);
+    }
+    pendingOpenPaths = [];
+    return;
   }
+
+  const startupWindow = await createWindow();
+  await promptStartupChoice(startupWindow);
+};
+
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', async (_event, argv) => {
+    const fileArgs = argv.filter((arg) => isSupportedDocument(arg));
+
+    if (fileArgs.length === 0) {
+      const window = getFocusedWindow() ?? await createWindow();
+      if (window.isMinimized()) window.restore();
+      window.focus();
+      return;
+    }
+
+    for (const filePath of fileArgs) {
+      const window = await createWindow();
+      await loadDocumentIntoWindow(window, filePath);
+    }
+  });
+}
+
+app.on('open-file', async (event, filePath) => {
+  event.preventDefault();
+  if (!isSupportedDocument(filePath)) return;
+
+  if (app.isReady()) {
+    const window = await createWindow();
+    await loadDocumentIntoWindow(window, filePath);
+    return;
+  }
+
+  pendingOpenPaths.push(filePath);
+});
+
+app.whenReady().then(async () => {
+  await bootstrap();
 
   app.on('activate', async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      await createWindow();
+      const window = await createWindow();
+      await promptStartupChoice(window);
     }
   });
 });
@@ -390,58 +646,17 @@ app.on('window-all-closed', () => {
   }
 });
 
-if (!gotSingleInstanceLock) {
-  app.quit();
-} else {
-  app.on('second-instance', async (_event, argv) => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
-    const fileArg = argv.find((arg) => arg.endsWith('.md') || arg.endsWith('.markdown') || arg.endsWith('.mdx') || arg.endsWith('.txt'));
-    if (fileArg) {
-      await openFilePath(fileArg);
-    }
-  });
-}
+ipcMain.on('document:update-state', (event, payload) => {
+  const window = getWindowFromEvent(event);
+  const state = getWindowState(window);
+  if (!window || !state) return;
 
-app.on('open-file', async (event, filePath) => {
-  event.preventDefault();
-  if (app.isReady()) {
-    await openFilePath(filePath);
-  } else {
-    pendingOpenPath = filePath;
-  }
-});
-
-ipcMain.handle('dialog:open', async () => {
-  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
-    properties: ['openFile'],
-    filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdx', 'txt'] }]
-  });
-
-  if (canceled || filePaths.length === 0) return null;
-
-  const filePath = filePaths[0];
-  const content = await readFile(filePath, 'utf8');
-  await addRecent(filePath);
-  return { filePath, content };
-});
-
-ipcMain.handle('dialog:save', async (_event, defaultPath) => {
-  const safeDefault = defaultPath || path.join(app.getPath('documents'), 'Untitled.md');
-  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
-    defaultPath: safeDefault,
-    filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }]
-  });
-
-  if (canceled || !filePath) return null;
-  return filePath;
-});
-
-ipcMain.handle('file:write', async (_event, filePath, content) => {
-  await writeFile(filePath, content, 'utf8');
-  return true;
+  state.filePath = payload?.filePath ?? null;
+  state.content = typeof payload?.content === 'string' ? payload.content : state.content;
+  state.isDirty = Boolean(payload?.isDirty);
+  state.isPreview = Boolean(payload?.isPreview);
+  updateWindowAppearance(window);
+  buildMenu();
 });
 
 ipcMain.handle('file:read', async (_event, filePath) => {
@@ -450,95 +665,42 @@ ipcMain.handle('file:read', async (_event, filePath) => {
   return { filePath, content };
 });
 
-ipcMain.handle('recents:add', async (_event, filePath) => {
-  await addRecent(filePath);
-  return true;
-});
-
-ipcMain.handle('recents:get', async () => recents);
-
-ipcMain.handle('recents:clear', async () => {
-  recents = [];
-  await saveRecents();
-  buildMenu();
-  return true;
-});
-
-ipcMain.handle('last:get', async () => lastFilePath);
-
-ipcMain.handle('temp:load', async () => {
-  const filePath = tempPath();
-  if (!existsSync(filePath)) return null;
-  const content = await readFile(filePath, 'utf8');
-  return { filePath, content };
-});
-
-ipcMain.handle('temp:clear', async () => {
-  const filePath = tempPath();
-  if (!existsSync(filePath)) return false;
-  await unlink(filePath);
-  return true;
-});
-
-ipcMain.handle('temp:path', async () => tempPath());
-
-ipcMain.handle('window:title', async (_event, payload) => {
-  if (!mainWindow || mainWindow.isDestroyed()) return false;
-  const { title, filePath, edited } = payload || {};
-  if (typeof title === 'string') {
-    mainWindow.setTitle(title);
-  }
-  if (typeof edited === 'boolean') {
-    mainWindow.setDocumentEdited(edited);
-  }
-  if (filePath) {
-    mainWindow.setRepresentedFilename(filePath);
+ipcMain.handle('window:toggle-maximize', async (event) => {
+  const window = getWindowFromEvent(event);
+  if (!window || window.isDestroyed()) return false;
+  if (window.isMaximized()) {
+    window.unmaximize();
   } else {
-    mainWindow.setRepresentedFilename('');
+    window.maximize();
   }
   return true;
 });
 
-ipcMain.handle('window:exit-fullscreen', async () => {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.setFullScreen(false);
+ipcMain.handle('window:exit-fullscreen', async (event) => {
+  const window = getWindowFromEvent(event);
+  if (window && !window.isDestroyed()) {
+    window.setFullScreen(false);
   }
   return true;
 });
 
-ipcMain.handle('window:toggle-maximize', async () => {
-  if (!mainWindow || mainWindow.isDestroyed()) return false;
-  if (mainWindow.isMaximized()) {
-    mainWindow.unmaximize();
-  } else {
-    mainWindow.maximize();
+ipcMain.handle('find:start', async (event, text, options = {}) => {
+  const window = getWindowFromEvent(event);
+  if (!window || window.isDestroyed()) return false;
+  const contents = window.webContents;
+
+  if (!text) {
+    contents.stopFindInPage('clearSelection');
+    return true;
   }
-  return true;
+
+  const requestId = contents.findInPage(text, options);
+  return requestId;
 });
 
-ipcMain.handle('find:start', async (_event, text, options = {}) => {
-  if (!mainWindow || mainWindow.isDestroyed()) return false;
-  const query = String(text || '').trim();
-  if (!query) {
-    mainWindow.webContents.stopFindInPage('clearSelection');
-    return false;
-  }
-  const { forward = true, findNext = false } = options;
-  mainWindow.webContents.findInPage(query, {
-    forward: Boolean(forward),
-    findNext: Boolean(findNext),
-    matchCase: false
-  });
+ipcMain.handle('find:stop', async (event) => {
+  const window = getWindowFromEvent(event);
+  if (!window || window.isDestroyed()) return false;
+  window.webContents.stopFindInPage('clearSelection');
   return true;
-});
-
-ipcMain.handle('find:stop', async () => {
-  if (!mainWindow || mainWindow.isDestroyed()) return false;
-  mainWindow.webContents.stopFindInPage('clearSelection');
-  return true;
-});
-
-ipcMain.on('preview:state', (_event, nextState) => {
-  isPreview = Boolean(nextState);
-  updateMenuState();
 });
