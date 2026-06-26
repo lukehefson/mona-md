@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('mona', {
   updateDocumentState: (payload) => ipcRenderer.send('document:update-state', payload),
   readFile: (filePath) => ipcRenderer.invoke('file:read', filePath),
+  openPreviewLink: (href) => ipcRenderer.invoke('preview:open-link', href),
   exitFullscreen: () => ipcRenderer.invoke('window:exit-fullscreen'),
   toggleMaximize: () => ipcRenderer.invoke('window:toggle-maximize'),
   findInPage: (text, options) => ipcRenderer.invoke('find:start', text, options),

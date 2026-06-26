@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu, dialog, shell, ipcMain } from 'electron';
 import { readFile, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
+import { pathToFileURL } from 'url';
 
 const isDev = !app.isPackaged;
 app.setName('Mona MD');
@@ -29,6 +30,41 @@ const getWindowState = (window) => {
 const getWindowFromEvent = (event) => BrowserWindow.fromWebContents(event.sender);
 
 const getFocusedWindow = () => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null;
+
+const blockedPreviewLinkProtocols = new Set(['javascript:', 'data:', 'vbscript:']);
+
+const isBlockedPreviewLinkProtocol = (url) => blockedPreviewLinkProtocols.has(url.protocol.toLowerCase());
+
+const directoryFileUrl = (filePath) => {
+  const directoryPath = path.dirname(filePath);
+  const directoryWithSeparator = directoryPath.endsWith(path.sep)
+    ? directoryPath
+    : `${directoryPath}${path.sep}`;
+  return pathToFileURL(directoryWithSeparator);
+};
+
+const normalizePreviewLink = (href, filePath) => {
+  if (typeof href !== 'string') return null;
+
+  const trimmedHref = href.trim();
+  if (!trimmedHref || trimmedHref.startsWith('#')) return null;
+
+  try {
+    const url = new URL(trimmedHref.startsWith('//') ? `https:${trimmedHref}` : trimmedHref);
+    if (isBlockedPreviewLinkProtocol(url)) return null;
+    return url.href;
+  } catch {
+    if (!filePath) return null;
+  }
+
+  try {
+    const url = new URL(trimmedHref, directoryFileUrl(filePath));
+    if (isBlockedPreviewLinkProtocol(url)) return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+};
 
 const loadRecents = async () => {
   try {
@@ -663,6 +699,22 @@ ipcMain.handle('file:read', async (_event, filePath) => {
   const content = await readFile(filePath, 'utf8');
   await addRecent(filePath);
   return { filePath, content };
+});
+
+ipcMain.handle('preview:open-link', async (event, href) => {
+  const window = getWindowFromEvent(event);
+  if (!window || window.isDestroyed()) return { opened: false };
+
+  const state = getWindowState(window);
+  const url = normalizePreviewLink(href, state?.filePath);
+  if (!url) return { opened: false };
+
+  try {
+    await shell.openExternal(url);
+    return { opened: true };
+  } catch {
+    return { opened: false };
+  }
 });
 
 ipcMain.handle('window:toggle-maximize', async (event) => {
