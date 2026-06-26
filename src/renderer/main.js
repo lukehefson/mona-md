@@ -411,18 +411,33 @@ titlebarHitArea.addEventListener('dblclick', () => {
 });
 
 previewContent.addEventListener('click', (event) => {
-  const anchor = event.target.closest('a[href^="#"]');
+  const clickedElement = event.target instanceof Element ? event.target : null;
+  const anchor = clickedElement?.closest('a[href]');
   if (!anchor) return;
-  const hash = anchor.getAttribute('href') || '';
-  const targetId = decodeURIComponent(hash.slice(1));
-  if (!targetId) return;
-  const target = previewContent.querySelector(`#${CSS.escape(targetId)}`);
-  if (!target) return;
+
+  const href = anchor.getAttribute('href') || '';
   event.preventDefault();
-  target.scrollIntoView({ block: 'start' });
-  if (history.replaceState) {
-    history.replaceState(null, '', `#${targetId}`);
+
+  if (href.startsWith('#')) {
+    let targetId = href.slice(1);
+    try {
+      targetId = decodeURIComponent(targetId);
+    } catch {
+      // Use the raw hash if the link contains malformed escape sequences.
+    }
+
+    if (!targetId) return;
+    const target = previewContent.querySelector(`#${CSS.escape(targetId)}`);
+    if (!target) return;
+
+    target.scrollIntoView({ block: 'start' });
+    if (history.replaceState) {
+      history.replaceState(null, '', `#${targetId}`);
+    }
+    return;
   }
+
+  void window.mona.openPreviewLink(href);
 });
 
 findInput.addEventListener('keydown', (event) => {
