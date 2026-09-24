@@ -1,5 +1,11 @@
 # mona-md
 
+Desktop markdown editor that mimics GitHub comments.
+
+Entirely vibe coded, Electron app. Ugly pushes to `main`. Sorry haters!
+
+Built for Me. But you could use it if you wanted to… I guess.
+
 ## Local Development
 
 1. Install dependencies:
